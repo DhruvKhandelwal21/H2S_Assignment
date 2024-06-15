@@ -5,7 +5,7 @@ interface CustomError extends Error {
   message: string;
 }
 
-
+// Middleware for sending error messages
 const errorHandler = (e: CustomError, req: Request, res: Response, next: NextFunction) => {
   res.status(e.statusCode || 500).send({
     status: e.statusCode || 500,

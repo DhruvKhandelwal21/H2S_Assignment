@@ -1,7 +1,13 @@
 import { Db, ObjectId } from "mongodb";
 import { ObjectIdWithErrorHandler, updateCompose } from "../../helper";
+import ApiError from "../../utils/ApiError";
+import { Task } from "../../interfaces/common.interface";
 
 const commonUserId = ObjectIdWithErrorHandler("666c19dc4a86eedd7b998fea");
+
+// matched the common user id and deconstructed tasks with unwind 
+// followed by using match again for removing tasks with deletion set true
+// filter operator -> for setting the updated subTasks with deletion set to false only.
 const findAll = async (db: Db) => {
   const aggregate = [
     {
@@ -20,12 +26,16 @@ const findAll = async (db: Db) => {
         deletion: { $ne: true },
       },
     },
+    {
+      $set : {
+          subTasks : { $ifNull: [{$filter : { input : "$subTasks", as : "f", cond: { $ne: ["$$f.deletion", true] }}}, []] }}
+      }
   ];
   const data = await db.collection("Users").aggregate(aggregate).toArray();
   return data;
 };
 
-const create = async (db: Db, payload: any) => {
+const create = async (db: Db, payload: any): Promise<Task | {}> => {
 
   const data = await db.collection("Users").findOneAndUpdate(
     {
@@ -35,17 +45,24 @@ const create = async (db: Db, payload: any) => {
       $push: { tasks: { ...payload, _id: new ObjectId(), deletion: false } },
     },
     {
-      returnDocument: 'after'
+      returnDocument: 'after',
+      projection: { tasks: 1 }
     }
   );
-  return data;
+  if (!data || !data.tasks) {
+    throw new ApiError(500,'Failed to create new task');
+  }
+ const tasks = data.tasks;
+  return tasks[tasks.length-1];
 };
 
-const update = async (db: Db, payload: any, taskId: string) => {
+// used the update decompose method for updating all nested task properties
+const update = async (db: Db, payload: any, taskId: string): Promise<Task | {}> => {
+  const id = ObjectIdWithErrorHandler(taskId);
   const data = await db.collection("Users").findOneAndUpdate(
     {
       _id: commonUserId,
-      "tasks._id": ObjectIdWithErrorHandler(taskId),
+      "tasks._id": id,
     },
     {
       $set: {
@@ -53,14 +70,20 @@ const update = async (db: Db, payload: any, taskId: string) => {
       },
     },
     {
-      returnDocument: 'after'
+      returnDocument: 'after',
     }
   );
-  return data;
+
+    if (!data || !data.tasks) {
+      throw new ApiError(500,'Failed to update task');
+    }
+  const tasks = data?.tasks;
+  const updatedTask =tasks?.find((ele:Task)=>ele._id.equals(id));
+  return updatedTask
 };
 
 const remove = async (db: Db, taskId: string) => {
-  const data = await db.collection("Users").findOneAndUpdate(
+  await db.collection("Users").findOneAndUpdate(
     {
       _id: commonUserId,
       "tasks._id": ObjectIdWithErrorHandler(taskId),
@@ -71,7 +94,7 @@ const remove = async (db: Db, taskId: string) => {
       },
     },
   );
-  return data;
+  return 'deleted';
 };
 
 export default {

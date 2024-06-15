@@ -25,9 +25,9 @@ export const create = async (req: Request, res: Response, next: NextFunction)=> 
 
 export const update = async (req: Request, res: Response, next: NextFunction)=> {
     const {db} = req.app.locals;
-    const {taskId, subTaskId }= req.params
+    const {taskId }= req.params
    try {
-    const data = await service.update(db, req.body, taskId, subTaskId);
+    const data = await service.update(db, req.body, taskId);
     res.status(200).send({status: 200, data: data, message: "Updated record successfully"});
    }catch(e){
     next(e);
